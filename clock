@@ -1,0 +1,4 @@
+until usr/bin/python clock.py; do
+      echo "clock crashed with exit code $?.  Respawning.."
+      sleep 1
+done
