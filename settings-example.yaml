@@ -1,0 +1,7 @@
+api_key: 'api-key-here'
+# trains / buses with less than this many seconds until they arrive will not show up
+delay: 420
+# which stop you are interested in
+stop_id: 70005
+# how long until you consider the data 'stale'
+delta: 65

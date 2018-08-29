@@ -1,27 +1,30 @@
 #!/usr/bin/python
 
-import time, datetime, signal, sys, requests
+import time, datetime, signal, sys, requests, yaml
 from Adafruit_7Segment import SevenSegment
 from threading import Thread, Lock
 
 print "Press CTRL+C to power down"
 
 class Clock:
-  url = "http://realtime.mbta.com/developer/api/v2/predictionsbystop?api_key=wX9NwuHnZU2ToO7GmGR9uw&stop={}&format=json"
+  url = "https://api-v3.mbta.com/predictions?filter%5Bstop%5D=70180&api_key=40e710800b80496ebe17d584b103dab5"
   segment = SevenSegment(address = 0x70)
   mutex = Lock()
   time_format = "{:0>2d}{:0>2d}"
-  
+
   def __init__(self):
-    self.delay = 7 * 60
-    self.stop_id = 70005
     self.timestamp = time.time()
     self.prediction = 0
     self.exit = False
-    self.delta = 65
+    self.loadSettings()
+
+  def loadSettings(self):
+    with open("./settings.yaml", 'r') as stream:
+      settings = yaml.load(stream)
+      self.settings = settings
 
   def formatted_url(self):
-    return self.url.format(self.stop_id)
+    return self.url.format(self.settings['stop_id'])
 
   def formatted_time_string(self):
     next_prediction = max(self.formatted_time(), 0)
@@ -34,7 +37,7 @@ class Clock:
   def get_next_prediction(self):
     next_timestamp = None
     next_prediction = None
-    
+
     try:
       data = requests.get(self.formatted_url()).json()
       next_timestamp = int(time.time())
@@ -43,8 +46,8 @@ class Clock:
       print "failed to get data from API"
 
     if data.get("mode", False):
-      #TODO this might fail if there are no routes, or if a direction is disabled. 
-      raw_trips = data["mode"][0]["route"][0]["direction"][0]["trip"] 
+      #TODO this might fail if there are no routes, or if a direction is disabled.
+      raw_trips = data["mode"][0]["route"][0]["direction"][0]["trip"]
       predictions = [int(x['pre_away']) for x in raw_trips]
       predictions.sort # not strictly necessary I dont think
       filtered_predictions = [x for x in predictions if x > self.delay]
@@ -64,14 +67,14 @@ class Clock:
     character_string = self.formatted_time_string()
 
     print self.prediction
-    
+
     if int(character_string[0]) != 0:
       self.segment.writeDigit(0, int(character_string[0])) # Tens
     else:
       self.segment.writeDigitRaw(0, 0)
 
     self.segment.writeDigit(1, int(character_string[1])) # Ones
-    
+
     self.handle_colon()
 
     self.segment.writeDigit(3, int(character_string[2]))   # Tens
@@ -79,7 +82,7 @@ class Clock:
     # Toggle colon
 
   def handle_colon(self):
-    code = 2 
+    code = 2
     if int(time.time() - self.timestamp) > self.delta:
       code |= 4
 
@@ -113,7 +116,7 @@ class Clock:
   def clear(self):
     for i in range(0,5):
       self.segment.writeDigitRaw(i, 0)
-                     
+
 c = Clock()
 signal.signal(signal.SIGINT, c.exit_gracefully) # should probably leave out here. don't want each instance setting one for itself
 c.run()
