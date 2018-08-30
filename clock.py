@@ -3,11 +3,11 @@
 import time, datetime, signal, sys, requests, yaml
 from Adafruit_7Segment import SevenSegment
 from threading import Thread, Lock
+from api import API
 
-print "Press CTRL+C to power down"
+print("Press CTRL+C to power down")
 
 class Clock:
-  url = "https://api-v3.mbta.com/predictions?filter%5Bstop%5D=70180&api_key=40e710800b80496ebe17d584b103dab5"
   segment = SevenSegment(address = 0x70)
   mutex = Lock()
   time_format = "{:0>2d}{:0>2d}"
@@ -16,44 +16,20 @@ class Clock:
     self.timestamp = time.time()
     self.prediction = 0
     self.exit = False
-    self.loadSettings()
-
-  def loadSettings(self):
-    with open("./settings.yaml", 'r') as stream:
-      settings = yaml.load(stream)
-      self.settings = settings
-
-  def formatted_url(self):
-    return self.url.format(self.settings['stop_id'])
+    self.api = API()
 
   def formatted_time_string(self):
     next_prediction = max(self.formatted_time(), 0)
-    return self.time_format.format(next_prediction/60,next_prediction%60)
+    return self.time_format.format(next_prediction//60,next_prediction%60)
 
   # the time into the negatives. used to be used for blinking colon but that's annoying
   def formatted_time(self):
     return int(self.prediction - (time.time() - self.timestamp))
 
   def get_next_prediction(self):
-    next_timestamp = None
-    next_prediction = None
-
-    try:
-      data = requests.get(self.formatted_url()).json()
-      next_timestamp = int(time.time())
-    except:
-      data = {}
-      print "failed to get data from API"
-
-    if data.get("mode", False):
-      #TODO this might fail if there are no routes, or if a direction is disabled.
-      raw_trips = data["mode"][0]["route"][0]["direction"][0]["trip"]
-      predictions = [int(x['pre_away']) for x in raw_trips]
-      predictions.sort # not strictly necessary I dont think
-      filtered_predictions = [x for x in predictions if x > self.delay]
-      if len(filtered_predictions) > 0:
-        next_prediction = filtered_predictions[0]
-
+    next_prediction = self.api.get_next_prediction()
+    next_timestamp = int(time.time())
+ 
     self.mutex.acquire()
     try:
       if next_timestamp and next_prediction:
@@ -66,7 +42,7 @@ class Clock:
     #TODO "none" shown on clock when no trains?
     character_string = self.formatted_time_string()
 
-    print self.prediction
+    print(self.prediction)
 
     if int(character_string[0]) != 0:
       self.segment.writeDigit(0, int(character_string[0])) # Tens
@@ -83,7 +59,7 @@ class Clock:
 
   def handle_colon(self):
     code = 2
-    if int(time.time() - self.timestamp) > self.delta:
+    if int(time.time() - self.timestamp) > 65: #TODO self.delta was here but splitting out settings put it in the api lol
       code |= 4
 
     self.segment.writeDigitRaw(2, code)
